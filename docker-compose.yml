@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  # ============================================================
+  # REDIS — брокер сообщений для Celery
+  # ============================================================
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+  # ============================================================
+  # ORCHESTRATOR — FastAPI (принимает задачи)
+  # ============================================================
+  orchestrator:
+    build: ./Orchestrator
+    ports:
+      - "8001:8001"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - VISION_URL=http://vision-service:5001/api/vision/assess
+      - ROUTING_URL=http://routing-service:5002/build
+      - DATABASE_URL=sqlite:////app/data/orchestrator.db
+    depends_on:
+      - redis
+      - vision-service
+      - routing-service
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+  # ============================================================
+  # CELERY WORKER — обрабатывает задачи из Redis
+  # ============================================================
+  celery-worker:
+    build: ./Orchestrator
+    command: celery -A app.tasks worker --loglevel=info --concurrency=2
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - VISION_URL=http://vision-service:5001/api/vision/assess
+      - ROUTING_URL=http://routing-service:5002/build
+      - DATABASE_URL=sqlite:////app/data/orchestrator.db
+    depends_on:
+      - redis
+      - orchestrator
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+  # ============================================================
+  # VISION SERVICE — C# + ML.NET (оценка фото)
+  # ============================================================
+  vision-service:
+    build: ./VisionService/VisionService
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./VisionService/VisionService/ml-assets:/app/ml-assets
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+  # ============================================================
+  # ROUTING SERVICE — Python (построение маршрутов)
+  # ============================================================
+  routing-service:
+    build: ./RoutingService
+    ports:
+      - "5002:5002"
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+  # ============================================================
+  # GATEWAY — внешний шлюз
+  # ============================================================
+  gateway:
+    build: ./Gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ORCHESTRATOR_URL=http://orchestrator:8001
+    depends_on:
+      - orchestrator
+    networks:
+      - eco-network
+    restart: unless-stopped
+
+networks:
+  eco-network:
+    driver: bridge
