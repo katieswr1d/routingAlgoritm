@@ -121,15 +121,19 @@ curl http://localhost:8000/orchestrator/health
 ```
 
 ### Использование
+### Использование
 
 ```bash
-# 1. Создать файл с координатами
-echo '[{"lat":55.1,"lon":37.2}]' > coords.json
+# 1. Создать файл с координатами (минимум 3 точки)
+echo '[{"lat":55.1,"lon":37.2},{"lat":55.2,"lon":37.3},{"lat":55.3,"lon":37.4}]' > coords.json
 
-# 2. Загрузить фотографии
+# 2. Загрузить фотографии (минимум 3, верхнего лимита)
 curl -X POST http://localhost:8000/upload \
   -F "files=@photo1.png" \
+  -F "files=@photo2.png" \
+  -F "files=@photo3.png" \
   -F "coordinates=<coords.json;type=application/json"
+```bash
 
 # 3. Получить task_id и проверить статус
 curl http://localhost:8000/task/{task_id}
